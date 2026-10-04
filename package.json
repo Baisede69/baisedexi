@@ -1,0 +1,12 @@
+{
+  "name": "neon-extraction-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "俯视角搜打撤小游戏 —— 单文件交付，附带 Playwright 自动化测试",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

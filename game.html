@@ -1,0 +1,1867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>霓虹突围 · 俯视角搜打撤</title>
+<style>
+  /* ============================================================
+   *  全局样式（霓虹深色主题）
+   * ============================================================ */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #07090f;
+    font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+    color: #dfe7f3;
+    user-select: none;
+    cursor: crosshair;
+  }
+  #game { display: block; position: absolute; inset: 0; }
+
+  /* 通用：叠加层与面板 */
+  .overlay {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(4, 7, 14, 0.78);
+    backdrop-filter: blur(3px);
+  }
+  .hidden { display: none !important; }
+  .panel {
+    background: linear-gradient(160deg, #0d1424, #0a0f1c);
+    border: 1px solid #1f3a5f;
+    box-shadow: 0 0 24px rgba(45, 160, 255, 0.25), inset 0 0 40px rgba(20, 60, 110, 0.35);
+    border-radius: 10px;
+    padding: 22px 26px;
+  }
+  .neon-title {
+    font-size: 30px; letter-spacing: 5px; font-weight: 800;
+    color: #5fe0ff; text-shadow: 0 0 12px #22b8ff, 0 0 30px #1e6cff;
+  }
+  .sub { color: #6f88a8; font-size: 13px; letter-spacing: 1px; }
+
+  /* 按钮 */
+  .btn {
+    display: inline-block; cursor: pointer; text-align: center;
+    padding: 10px 20px; margin: 6px 0;
+    background: rgba(30, 108, 255, 0.12);
+    border: 1px solid #2d6cff; border-radius: 6px;
+    color: #9fd4ff; font-size: 14px; letter-spacing: 1px;
+    transition: all 0.15s ease;
+  }
+  .btn:hover { background: rgba(45, 160, 255, 0.28); color: #eaf7ff; box-shadow: 0 0 16px rgba(45, 160, 255, 0.5); }
+  .btn.disabled { opacity: 0.35; pointer-events: none; }
+  .btn.danger { border-color: #ff5a6a; color: #ff9aa6; background: rgba(255, 60, 80, 0.1); }
+  .btn.danger:hover { background: rgba(255, 60, 80, 0.25); box-shadow: 0 0 16px rgba(255, 60, 80, 0.5); }
+  .btn.small { padding: 5px 10px; font-size: 12px; margin: 0; }
+
+  /* ============================================================
+   *  HUD（游戏内抬头显示）
+   * ============================================================ */
+  #hud { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  #hud .hp-wrap {
+    position: absolute; left: 22px; bottom: 22px; width: 260px;
+  }
+  #hud .bar {
+    height: 18px; border: 1px solid #2c4a6e; border-radius: 4px;
+    background: rgba(10, 16, 28, 0.8); overflow: hidden;
+  }
+  #hud .bar > i { display: block; height: 100%; width: 100%; transition: width 0.15s; }
+  #hpFill { background: linear-gradient(90deg, #ff4d5e, #ff8a5b); }
+  #hud .hp-text { position: absolute; left: 8px; top: 1px; font-size: 12px; letter-spacing: 1px; }
+  #hud .ammo {
+    position: absolute; right: 26px; bottom: 20px; text-align: right;
+  }
+  #hud .ammo .mag { font-size: 34px; font-weight: 800; color: #ffe08a; text-shadow: 0 0 12px rgba(255, 200, 60, 0.6); }
+  #hud .ammo .res { font-size: 16px; color: #8ba2c0; }
+  #hud .topbar {
+    position: absolute; left: 50%; top: 16px; transform: translateX(-50%);
+    display: flex; gap: 26px; font-size: 13px; letter-spacing: 1px;
+    background: rgba(8, 13, 24, 0.6); padding: 8px 20px; border-radius: 20px;
+    border: 1px solid #1c3a5c;
+  }
+  #hud .topbar b { color: #5fe0ff; }
+  #hud .prompt {
+    position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%);
+    font-size: 15px; color: #eaf7ff; background: rgba(10, 20, 36, 0.85);
+    border: 1px solid #2d6cff; border-radius: 6px; padding: 8px 16px;
+    box-shadow: 0 0 16px rgba(45, 160, 255, 0.4);
+  }
+  #hud .extract-bar {
+    position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%);
+    width: 320px; text-align: center;
+  }
+  #hud .extract-bar .lbl { font-size: 13px; color: #7dffb0; margin-bottom: 6px; letter-spacing: 2px; }
+  #hud .extract-bar .bar { height: 14px; }
+  #extractFill { background: linear-gradient(90deg, #2ecc71, #7dffb0); }
+  #hud .kills { position: absolute; right: 26px; top: 18px; font-size: 13px; color: #ff9aa6; letter-spacing: 1px; }
+
+  /* ============================================================
+   *  开箱弹窗：左宝箱 / 右背包
+   * ============================================================ */
+  .loot-panel { width: 880px; max-width: 94vw; height: 560px; max-height: 88vh; display: flex; flex-direction: column; }
+  .loot-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .loot-cols { display: flex; gap: 18px; flex: 1; min-height: 0; }
+  .loot-col { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .loot-col > h3 { font-size: 14px; color: #8ba2c0; letter-spacing: 2px; margin-bottom: 8px; font-weight: 600; }
+  .slot-grid {
+    flex: 1; overflow-y: auto; display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px; align-content: start;
+    padding: 10px; border: 1px solid #17324f; border-radius: 8px;
+    background: rgba(6, 10, 20, 0.6);
+  }
+  .slot-grid::-webkit-scrollbar { width: 6px; }
+  .slot-grid::-webkit-scrollbar-thumb { background: #1f3a5f; border-radius: 3px; }
+
+  /* 单个物品卡片 —— 旋转浮现动画 */
+  .item {
+    position: relative; height: 84px; border-radius: 8px; cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 6px; text-align: center; font-size: 12px; gap: 3px;
+    background: rgba(12, 20, 34, 0.9);
+    border: 1px solid #24405f;
+    animation: itemAppear 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+    transition: transform 0.12s, box-shadow 0.12s, border-color 0.12s;
+  }
+  @keyframes itemAppear {
+    0%   { opacity: 0; transform: rotate(-22deg) translateY(20px) scale(0.75); filter: blur(2px); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: rotate(0deg) translateY(0) scale(1); filter: blur(0); }
+  }
+  .item .ico { font-size: 20px; line-height: 1; }
+  .item .nm { font-weight: 600; }
+  .item .vl { color: #8ba2c0; font-size: 11px; }
+  .item.q-white  { border-color: #8fa2b8; box-shadow: inset 0 0 14px rgba(180, 200, 220, 0.14); }
+  .item.q-blue   { border-color: #4ea1ff; box-shadow: inset 0 0 16px rgba(78, 161, 255, 0.28); }
+  .item.q-purple { border-color: #b06bff; box-shadow: inset 0 0 18px rgba(176, 107, 255, 0.32); }
+  .item.q-gold   { border-color: #ffcb45; box-shadow: inset 0 0 20px rgba(255, 203, 69, 0.38); }
+  .item.q-white .nm  { color: #cfd8e3; }
+  .item.q-blue .nm   { color: #8fc6ff; }
+  .item.q-purple .nm { color: #d0a6ff; }
+  .item.q-gold .nm   { color: #ffe08a; }
+  /* 悬停高亮（开箱时鼠标悬停 + 按 F 拾取） */
+  .item.hovered { transform: scale(1.06); border-color: #7dffb0; box-shadow: 0 0 18px rgba(125, 255, 176, 0.6); }
+  .item.hovered::after {
+    content: "按 F 拾取"; position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%);
+    background: #123; color: #7dffb0; font-size: 10px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid #7dffb0; white-space: nowrap;
+  }
+  .item .drop-btn {
+    position: absolute; top: 3px; right: 3px; font-size: 10px;
+    background: rgba(255, 60, 80, 0.2); color: #ff9aa6; border: 1px solid #ff5a6a;
+    border-radius: 4px; padding: 0 4px; cursor: pointer; display: none;
+  }
+  .item:hover .drop-btn { display: block; }
+  .empty-hint { color: #44597a; font-size: 13px; grid-column: 1 / -1; text-align: center; padding: 30px 0; }
+
+  /* ============================================================
+   *  背包 / 仓库面板
+   * ============================================================ */
+  .bag-panel { width: 720px; max-width: 94vw; max-height: 88vh; display: flex; flex-direction: column; }
+  .bag-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 10px; overflow-y: auto; padding: 10px; flex: 1;
+    border: 1px solid #17324f; border-radius: 8px; background: rgba(6, 10, 20, 0.6);
+  }
+  .bag-grid::-webkit-scrollbar { width: 6px; }
+  .bag-grid::-webkit-scrollbar-thumb { background: #1f3a5f; border-radius: 3px; }
+  .slot-empty {
+    height: 84px; border-radius: 8px; border: 1px dashed #1d3450;
+    background: rgba(10, 16, 28, 0.5);
+    display: flex; align-items: center; justify-content: center; color: #23364f; font-size: 20px;
+  }
+  .row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .coin { color: #ffcb45; font-weight: 700; letter-spacing: 1px; }
+  .hint-line { font-size: 12px; color: #5d7595; margin-top: 10px; letter-spacing: 0.5px; }
+  /* 物品卡片上的操作按钮：红色=丢弃，蓝色=移动（装入/取出） */
+  .item .drop-btn.move { background: rgba(45, 160, 255, 0.2); color: #9fd4ff; border-color: #2d6cff; }
+  /* 宝箱「搜索中」占位卡：转圈动画（品质越高转得越久，时长由 JS 控制） */
+  .item.searching { cursor: default; border-color: #24405f; box-shadow: none; }
+  .item.searching .spinner {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 3px solid rgba(95, 224, 255, 0.18);
+    border-top-color: #5fe0ff;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  /* 仓库：携带子弹输入框 */
+  #warehousePanel input[type="number"] {
+    width: 84px; padding: 5px 8px; margin: 0 4px;
+    background: rgba(10, 16, 28, 0.9); border: 1px solid #2d6cff; border-radius: 5px;
+    color: #eaf7ff; font-size: 13px; outline: none;
+  }
+  #warehousePanel input[type="number"]:focus { box-shadow: 0 0 12px rgba(45, 160, 255, 0.5); }
+</style>
+</head>
+<body>
+  <!-- 游戏主画布 -->
+  <canvas id="game"></canvas>
+
+  <!-- ========================= HUD ========================= -->
+  <div id="hud" class="hidden">
+    <div class="topbar">
+      <span>剩余时间 <b id="hudTime">--:--</b></span>
+      <span>击杀 <b id="hudKills">0</b></span>
+      <span>背包 <b id="hudBag">0/20</b></span>
+      <span>药品 <b id="hudMeds">0</b></span>
+    </div>
+    <div class="kills">撤离点已标记（绿色光柱）</div>
+    <div class="hp-wrap">
+      <div class="bar"><i id="hpFill"></i><span class="hp-text" id="hpText">100 / 100</span></div>
+    </div>
+    <div class="ammo">
+      <div><span class="mag" id="magText">30</span><span class="res"> / <span id="resText">210</span></span></div>
+      <div class="sub" id="reloadHint"></div>
+    </div>
+    <div class="prompt hidden" id="promptText">按 F 交互</div>
+    <div class="extract-bar hidden" id="extractBar">
+      <div class="lbl">撤离中 <span id="extractPct">0</span>%</div>
+      <div class="bar"><i id="extractFill" style="width:0%"></i></div>
+    </div>
+  </div>
+
+  <!-- ========================= 开始界面 ========================= -->
+  <div class="overlay" id="startScreen">
+    <div class="panel" style="width:520px; text-align:center;">
+      <div class="neon-title">霓虹突围</div>
+      <div class="sub" style="margin:8px 0 20px;">NEON EXTRACTION · 俯视角搜打撤</div>
+      <div id="startStats" class="sub" style="margin-bottom:14px;"></div>
+      <div id="btnStart" class="btn" style="font-size:16px;">进入战场</div>
+      <div id="btnWarehouse" class="btn">仓库 / 装备与补给</div>
+      <div class="hint-line" style="text-align:left; margin-top:18px; line-height:1.9;">
+        移动 <b>WASD</b>　瞄准/射击 <b>鼠标（按住左键）</b>　疾跑 <b>Shift</b><br />
+        换弹 <b>R</b>　使用药品 <b>H</b>　交互/开箱/拾取 <b>F</b>　背包 <b>Tab</b>　关闭面板 <b>Esc</b><br />
+        目标：搜刮宝箱 → 抵达绿色撤离区停留 3 秒 → 带出物资存入仓库<br />
+        提示：仓库可购买子弹/药品，把药品「装入」背包区即可带进战场，按 H 回血
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================= 开箱弹窗 ========================= -->
+  <div class="overlay hidden" id="chestPanel">
+    <div class="panel loot-panel">
+      <div class="loot-head">
+        <div><span class="neon-title" style="font-size:20px;" id="chestTitle">铜宝箱</span>
+          <span class="sub" style="margin-left:12px;">鼠标悬停物品 → 按 F 拾取</span></div>
+        <div class="btn small" id="chestClose">关闭 (Esc)</div>
+      </div>
+      <div class="loot-cols">
+        <div class="loot-col">
+          <h3>宝箱物资</h3>
+          <div class="slot-grid" id="chestGrid"></div>
+        </div>
+        <div class="loot-col">
+          <h3>我的背包 <span class="sub" id="chestBagCount"></span></h3>
+          <div class="slot-grid" id="chestBagGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================= 背包面板 ========================= -->
+  <div class="overlay hidden" id="bagPanel">
+    <div class="panel bag-panel">
+      <div class="loot-head">
+        <div><span class="neon-title" style="font-size:20px;">背包</span>
+          <span class="sub" style="margin-left:12px;" id="bagCount"></span></div>
+        <div class="btn small" id="bagClose">关闭 (Tab / Esc)</div>
+      </div>
+      <div class="bag-grid" id="bagGrid"></div>
+      <div class="hint-line">悬停物品点击右上角「丢」即可丢弃到脚下；丢弃后靠近按 F 可重新拾取。</div>
+    </div>
+  </div>
+
+  <!-- ========================= 仓库面板 ========================= -->
+  <div class="overlay hidden" id="warehousePanel">
+    <div class="panel bag-panel" style="width:840px;">
+      <div class="loot-head">
+        <div><span class="neon-title" style="font-size:20px;">仓库</span>
+          <span class="sub" style="margin-left:12px;" id="whCount"></span></div>
+        <div class="btn small" id="whClose">关闭 (Esc)</div>
+      </div>
+      <div class="row" style="margin-bottom:10px;">
+        <div>游戏币 <span class="coin" id="whCoins">0</span></div>
+        <div>备用子弹 <span class="coin" id="whAmmo">0</span> 发</div>
+      </div>
+      <div class="row" style="margin-bottom:10px; gap:10px; justify-content:flex-start; flex-wrap:wrap;">
+        <div class="btn small" id="btnBuyAmmo">购买 30 发子弹（45 币）</div>
+        <div class="btn small" id="btnBuyMed">购买药品（50 币）</div>
+        <div class="btn small" id="btnSellAll">出售全部物资</div>
+      </div>
+      <div class="row" style="margin-bottom:14px; justify-content:flex-start; gap:10px;">
+        <div>本局携带子弹
+          <input id="carryInput" type="number" min="0" max="210" step="10" value="0" />
+          发 <span class="sub" id="carryMaxHint"></span>
+        </div>
+        <div class="btn small" id="btnSetCarry">设为携带量</div>
+      </div>
+      <div class="loot-col" style="margin-bottom:12px;">
+        <h3>背包区 · 携带入战场 <span class="sub" id="ldCount"></span></h3>
+        <div class="bag-grid" id="ldGrid" style="max-height:150px;"></div>
+      </div>
+      <div class="loot-col">
+        <h3>仓库物资 · 撤离带出（可出售 / 装入背包区）</h3>
+        <div class="bag-grid" id="whGrid" style="max-height:150px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================= 结算面板 ========================= -->
+  <div class="overlay hidden" id="resultPanel">
+    <div class="panel" style="width:460px; text-align:center;">
+      <div class="neon-title" id="resultTitle" style="font-size:26px;">撤离成功</div>
+      <div id="resultBody" class="sub" style="margin:16px 0; line-height:2; min-height:80px;"></div>
+      <div class="btn" id="btnBackBase">返回基地</div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+/* ================================================================
+ *  霓虹突围 —— 俯视角搜打撤小游戏
+ *  纯原生 HTML + CSS + JavaScript + Canvas 2D，无任何外部依赖。
+ *
+ *  模块划分（便于阅读与维护）：
+ *   M0 工具函数      —— 数学、随机、几何
+ *   M1 基础框架      —— 常量、地图、相机、渲染、游戏循环、输入
+ *   M2 战斗系统      —— 射击、弹匣/备弹、换弹、弹道与伤害、HUD
+ *   M3 人机 AI       —— 巡逻/追逐、视线判断、开枪
+ *   M4 宝箱与拾取    —— 刷箱、开箱弹窗、悬停 F 拾取
+ *   M5 背包系统      —— Tab 背包、格子上限、丢弃与地面拾取
+ *   M6 品质系统      —— 白/蓝/紫/金品质与宝箱掉落权重
+ *   M7 撤离与仓库    —— 撤离区、localStorage 仓库、购买子弹、死亡丢失
+ * ================================================================ */
+
+/* ================================================================
+ *  M0 —— 工具函数
+ * ================================================================ */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const rand = (a, b) => a + Math.random() * (b - a);
+const randInt = (a, b) => Math.floor(rand(a, b + 1));
+const dist2 = (ax, ay, bx, by) => (ax - bx) ** 2 + (ay - by) ** 2;
+const dist = (ax, ay, bx, by) => Math.hypot(ax - bx, ay - by);
+/** 按权重字典随机取一个 key，例如 {white:0.7, blue:0.3} */
+function pickWeightedWeights(weights) {
+  let total = 0;
+  for (const k in weights) total += weights[k];
+  let r = Math.random() * total;
+  for (const k in weights) { r -= weights[k]; if (r <= 0) return k; }
+  return Object.keys(weights)[0];
+}
+/** 圆与矩形是否相交（矩形用 x,y,w,h 表示） */
+function circleRect(cx, cy, r, rect) {
+  const nx = clamp(cx, rect.x, rect.x + rect.w);
+  const ny = clamp(cy, rect.y, rect.y + rect.h);
+  return dist2(cx, cy, nx, ny) <= r * r;
+}
+
+/* ================================================================
+ *  M6 —— 品质系统 & 物品定义
+ * ================================================================ */
+const QUALITY = {
+  white:  { name: "普通", color: "#cfd8e3", ico: "▫" },
+  blue:   { name: "精良", color: "#4ea1ff", ico: "◆" },
+  purple: { name: "稀有", color: "#b06bff", ico: "✦" },
+  gold:   { name: "传说", color: "#ffcb45", ico: "★" },
+};
+const QUALITY_ORDER = ["white", "blue", "purple", "gold"];
+// 物品池：按品质分类，value 为出售价值（游戏币）
+const ITEM_POOL = {
+  white: [
+    { name: "绷带",     type: "医疗", value: 20, ico: "🩹" },
+    { name: "压缩饼干", type: "补给", value: 16, ico: "🍪" },
+    { name: "铁钉",     type: "材料", value: 12, ico: "🔩" },
+    { name: "破布",     type: "材料", value: 10, ico: "🧣" },
+    { name: "空弹壳",   type: "材料", value: 8,  ico: "🔘" },
+  ],
+  blue: [
+    { name: "止痛药",   type: "医疗", value: 55, ico: "💊" },
+    { name: "铜线束",   type: "材料", value: 60, ico: "🧵" },
+    { name: "军用罐头", type: "补给", value: 48, ico: "🥫" },
+    { name: "弹匣弹簧", type: "配件", value: 70, ico: "🌀" },
+  ],
+  purple: [
+    { name: "肾上腺素", type: "医疗", value: 140, ico: "💉" },
+    { name: "芯片组",   type: "材料", value: 165, ico: "🧩" },
+    { name: "战术头盔", type: "装备", value: 185, ico: "🪖" },
+    { name: "夜视模块", type: "配件", value: 200, ico: "🔭" },
+  ],
+  gold: [
+    { name: "军用处理器", type: "材料", value: 420, ico: "🖥" },
+    { name: "黄金怀表",   type: "珍宝", value: 520, ico: "⌚" },
+    { name: "外骨骼核心", type: "装备", value: 680, ico: "🦾" },
+  ],
+};
+/** 依据品质生成一个具体物品实例 */
+function makeItem(quality) {
+  const pool = ITEM_POOL[quality];
+  const base = pool[randInt(0, pool.length - 1)];
+  // 价值上下浮动 ±15%，增加重复物品的差异感
+  const value = Math.round(base.value * rand(0.85, 1.15));
+  return { name: base.name, type: base.type, value, ico: base.ico, quality, uid: (Math.random() * 1e9) | 0 };
+}
+/** 生成一个「药品」：可在战场按 H 使用回血（usable/heal 供使用逻辑识别） */
+function makeMedkit() {
+  return {
+    name: "急救包", type: "药品", value: 50, ico: "💊", quality: "blue",
+    heal: CONFIG.medkit.heal, usable: true, uid: (Math.random() * 1e9) | 0,
+  };
+}
+
+/**
+ * 宝箱品级配置：
+ *  - count   : 掉落物品数量区间
+ *  - weights : 各品质出现概率（品级越高，高级物品概率越大）
+ */
+const CHEST_TIERS = {
+  bronze: { name: "铜宝箱", color: "#c8824a", glow: "rgba(200,130,74,0.8)",
+            count: [2, 3], weights: { white: 0.70, blue: 0.25, purple: 0.05, gold: 0.00 } },
+  silver: { name: "银宝箱", color: "#c9d4e0", glow: "rgba(201,212,224,0.8)",
+            count: [3, 4], weights: { white: 0.34, blue: 0.46, purple: 0.18, gold: 0.02 } },
+  gold:   { name: "金宝箱", color: "#ffcb45", glow: "rgba(255,203,69,0.9)",
+            count: [4, 5], weights: { white: 0.08, blue: 0.30, purple: 0.44, gold: 0.18 } },
+};
+/** 依据宝箱品级生成物品列表 */
+function rollLoot(tier) {
+  const cfg = CHEST_TIERS[tier];
+  const n = randInt(cfg.count[0], cfg.count[1]);
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(makeItem(pickWeightedWeights(cfg.weights)));
+  return out;
+}
+
+/* ================================================================
+ *  M1 —— 常量与全局状态
+ * ================================================================ */
+const CONFIG = {
+  world: { w: 3400, h: 3400 },          // 战场尺寸
+  player: { r: 15, hp: 100, speed: 235, runMul: 1.5 },
+  weapon: { magSize: 30, reserveMax: 210, reloadTime: 1.5, fireCd: 0.11, dmg: 26, spread: 0.035, bulletSpeed: 1150, bulletLife: 0.9 },
+  ai: { count: 6, r: 14, hp: 70, speed: 135, viewRange: 620, fireRange: 460, fireCd: [0.75, 1.4], dmg: 20, spread: 0.10, bulletSpeed: 760, bulletLife: 1.1 },
+  chests: { bronze: 7, silver: 4, gold: 2 },
+  // 宝箱开箱「搜索动画」时长（毫秒）：品质越高，转得越久
+  chestSpin: { white: 600, blue: 1000, purple: 1500, gold: 2100 },
+  raidTime: 300,                        // 单局时长（秒）
+  extract: { r: 80, holdTime: 3 },      // 撤离区半径 / 停留读条秒数
+  maze: { rooms: 8, braid: 0.22 },      // 迷宫：逻辑房间数（每边）/ 额外打通的环路概率
+  bagSlots: 20,                         // 背包格子上限
+  dropPickRange: 46,                    // 地面拾取范围
+  chestOpenRange: 58,                   // 开箱交互范围
+  buyAmmo: { amount: 30, cost: 45 },    // 购买子弹（30 发 / 45 币）
+  medkit: { cost: 50, heal: 30 },       // 购买药品（1 个 / 50 币，使用回复 30 血）
+  startAmmo: 210,                       // 初始备用弹（进图可携带上限 210 发）
+  startCoins: 300,                      // 初始游戏币
+  loadoutSlots: 20,                     // 仓库「背包区」格数上限（携带入战场的物资）
+};
+const SAVE_KEY = "neon_extraction_save_v1";
+
+// 全局游戏状态对象（所有系统共享）
+const game = {
+  state: "start",        // start | raid | result
+  uiMode: null,          // null | chest | bag | warehouse | result
+  time: 0,               // 本帧 dt
+  raidTimer: 0,          // 剩余时间
+  kills: 0,
+  cam: { x: 0, y: 0 },
+  walls: [],
+  maze: null,            // 迷宫网格 { gw, gh, cell, open }（供渲染/寻路使用）
+  chests: [],
+  enemies: [],
+  drops: [],             // 地面掉落物
+  bullets: [],
+  particles: [],
+  floatingTexts: [],
+  extract: { x: 0, y: 0, r: CONFIG.extract.r, progress: 0, inside: false },
+  player: null,
+  chestOpen: null,        // 当前打开的宝箱对象
+  hoveredChestUid: null,  // 开箱弹窗内鼠标悬停的物品 uid（物品会被取走，用 uid 比索引更稳）
+  inputs: { keys: {}, mouseX: 0, mouseY: 0, mouseDown: false },
+  shots: { player: 0, enemy: 0 },   // 累计开火次数（用于统计 / 测试）
+  save: null,            // localStorage 持久化数据
+  DPR: Math.min(window.devicePixelRatio || 1, 2),
+};
+
+/* ---------------- localStorage 存读档 ---------------- */
+function loadSave() {
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(SAVE_KEY)); } catch (e) { data = null; }
+  if (!data || typeof data !== "object") data = {};
+  if (typeof data.coins !== "number") data.coins = CONFIG.startCoins;
+  if (typeof data.ammo !== "number") data.ammo = CONFIG.startAmmo;
+  if (typeof data.carry !== "number") data.carry = Math.min(data.ammo, CONFIG.weapon.reserveMax);
+  // 携带子弹不能超过备用弹总量，也不超过进图上限 210
+  data.carry = clamp(Math.floor(data.carry), 0, Math.min(data.ammo, CONFIG.weapon.reserveMax));
+  if (!Array.isArray(data.warehouse)) data.warehouse = [];
+  if (!Array.isArray(data.loadout)) data.loadout = [];        // 仓库「背包区」：携带入战场的物资
+  if (typeof data.extracts !== "number") data.extracts = 0;
+  if (typeof data.deaths !== "number") data.deaths = 0;
+  return data;
+}
+function persistSave() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(game.save)); } catch (e) { /* 忽略隐私模式等写入失败 */ }
+}
+
+/* ================================================================
+ *  M1 —— 地图生成（连续迷宫墙体 + 环路通路）
+ * ================================================================ */
+function generateMap() {
+  const { w, h } = CONFIG.world;
+  const rooms = CONFIG.maze.rooms;      // 逻辑房间数（每边）
+  const gw = rooms * 2 + 1;             // 网格边长（奇数），房间之间夹一层墙
+  const cell = w / gw;                  // 每个网格单元尺寸（= 走廊宽度）
+  const open = new Uint8Array(gw * gw); // 1 = 可通行，0 = 墙
+  const at = (c, r) => r * gw + c;
+
+  // ---- 1) 递归回溯（深度优先）打通房间，得到连续、彼此连通的走廊 ----
+  const stack = [[1, 1]];
+  open[at(1, 1)] = 1;
+  const steps = [[0, -2], [0, 2], [-2, 0], [2, 0]];
+  while (stack.length) {
+    const [cx, cy] = stack[stack.length - 1];
+    const cand = [];
+    for (const [dx, dy] of steps) {
+      const nx = cx + dx, ny = cy + dy;
+      if (nx > 0 && ny > 0 && nx < gw - 1 && ny < gw - 1 && !open[at(nx, ny)]) {
+        cand.push([nx, ny, cx + dx / 2, cy + dy / 2]);   // 同时记录中间的墙格
+      }
+    }
+    if (cand.length === 0) { stack.pop(); continue; }
+    const [nx, ny, mx, my] = cand[randInt(0, cand.length - 1)];
+    open[at(mx, my)] = 1;               // 打通中间墙 → 形成通道
+    open[at(nx, ny)] = 1;
+    stack.push([nx, ny]);
+  }
+
+  // ---- 2) 编织：额外打通约 22% 的隔墙，制造环路，避免全是死胡同 ----
+  for (let r = 1; r < gw - 1; r++) {
+    for (let c = 1; c < gw - 1; c++) {
+      if (open[at(c, r)]) continue;
+      const horizontal = r % 2 === 0 && c % 2 === 1;   // 左右两个房间之间
+      const vertical = c % 2 === 0 && r % 2 === 1;     // 上下两个房间之间
+      if ((horizontal || vertical) && Math.random() < CONFIG.maze.braid) open[at(c, r)] = 1;
+    }
+  }
+
+  game.maze = { gw, gh: gw, cell, open };
+
+  // ---- 3) 把墙格按行连续合并成矩形，减少渲染与碰撞的图元数量 ----
+  game.walls = [];
+  for (let r = 0; r < gw; r++) {
+    let c = 0;
+    while (c < gw) {
+      if (!open[at(c, r)]) {
+        let c2 = c;
+        while (c2 + 1 < gw && !open[at(c2 + 1, r)]) c2++;
+        game.walls.push({ x: c * cell, y: r * cell, w: (c2 - c + 1) * cell, h: cell });
+        c = c2 + 1;
+      } else c++;
+    }
+  }
+}
+/** 取某个世界坐标所在的迷宫网格单元 */
+function mazeCellAt(x, y) {
+  const m = game.maze;
+  const c = clamp(Math.floor(x / m.cell), 0, m.gw - 1);
+  const r = clamp(Math.floor(y / m.cell), 0, m.gh - 1);
+  return { c, r };
+}
+/** 随机取一个可通行网格的中心点（用于 AI 巡逻 / 撤离点） */
+function randomOpenCellCenter() {
+  const m = game.maze;
+  if (!m) return { x: CONFIG.world.w / 2, y: CONFIG.world.h / 2 };
+  for (let i = 0; i < 300; i++) {
+    const c = randInt(1, m.gw - 2), r = randInt(1, m.gh - 2);
+    if (m.open[r * m.gw + c]) return { x: (c + 0.5) * m.cell, y: (r + 0.5) * m.cell };
+  }
+  return { x: CONFIG.world.w / 2, y: CONFIG.world.h / 2 };
+}
+/**
+ * 在迷宫网格上做 BFS 寻路，返回从起点到终点的路点数组（网格中心点）。
+ * 找不到通路时返回 null。
+ */
+function findPath(fromX, fromY, toX, toY) {
+  const m = game.maze;
+  if (!m) return null;
+  const s = mazeCellAt(fromX, fromY), g = mazeCellAt(toX, toY);
+  const start = s.r * m.gw + s.c, goal = g.r * m.gw + g.c;
+  const N = m.gw * m.gh;
+  if (!m.open[start] || !m.open[goal]) return null;
+  const prev = new Int32Array(N).fill(-1);
+  const seen = new Uint8Array(N);
+  const queue = [start]; seen[start] = 1;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  let head = 0;
+  while (head < queue.length) {
+    const cur = queue[head++];
+    if (cur === goal) break;
+    const cc = cur % m.gw, cr = (cur - cc) / m.gw;
+    for (const [dc, dr] of dirs) {
+      const nc = cc + dc, nr = cr + dr;
+      if (nc < 0 || nr < 0 || nc >= m.gw || nr >= m.gh) continue;
+      const ni = nr * m.gw + nc;
+      if (seen[ni] || !m.open[ni]) continue;
+      seen[ni] = 1; prev[ni] = cur; queue.push(ni);
+    }
+  }
+  if (!seen[goal]) return null;
+  // 回溯路径并转成世界坐标的网格中心点
+  const cells = [];
+  for (let cur = goal; cur !== -1; cur = prev[cur]) cells.push(cur);
+  cells.reverse();
+  return cells.map((i) => {
+    const c = i % m.gw, r = (i - c) / m.gw;
+    return { x: (c + 0.5) * m.cell, y: (r + 0.5) * m.cell };
+  });
+}
+/** 判断某点（含半径）是否与任意墙体重叠 */
+function posBlocked(x, y, r) {
+  for (const wl of game.walls) if (circleRect(x, y, r, wl)) return true;
+  return false;
+}
+/** 点到矩形的最短距离（用于挑选离墙最远的空地） */
+function distToRect(px, py, rect) {
+  const nx = clamp(px, rect.x, rect.x + rect.w);
+  const ny = clamp(py, rect.y, rect.y + rect.h);
+  return Math.hypot(px - nx, py - ny);
+}
+/** 在避开墙体的前提下随机找一个合法位置（并保证落在迷宫的可通行格内） */
+function randomFreePos(r, minDistFromPlayer = 0) {
+  const { w, h } = CONFIG.world;
+  for (let i = 0; i < 300; i++) {
+    const x = rand(120, w - 120), y = rand(120, h - 120);
+    if (posBlocked(x, y, r + 6)) continue;
+    if (game.maze) {   // 与寻路网格保持一致，避免落在"墙格"里
+      const mc = mazeCellAt(x, y);
+      if (!game.maze.open[mc.r * game.maze.gw + mc.c]) continue;
+    }
+    if (game.player && minDistFromPlayer > 0 &&
+        dist(x, y, game.player.x, game.player.y) < minDistFromPlayer) continue;
+    return { x, y };
+  }
+  // 兜底：退回某个可通行网格中心
+  return randomOpenCellCenter();
+}
+/** 视线判断：采样连线上的点，若被墙体阻挡返回 true */
+function lineBlocked(x1, y1, x2, y2) {
+  const d = dist(x1, y1, x2, y2);
+  const steps = Math.max(2, Math.ceil(d / 24));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    const px = x1 + (x2 - x1) * t;
+    const py = y1 + (y2 - y1) * t;
+    for (const wl of game.walls) {
+      if (px > wl.x && px < wl.x + wl.w && py > wl.y && py < wl.y + wl.h) return true;
+    }
+  }
+  return false;
+}
+
+/* ================================================================
+ *  M7 —— 出生点 / 撤离区
+ * ================================================================ */
+function spawnExtract() {
+  const { w, h } = CONFIG.world;
+  const r = CONFIG.extract.r;
+  const m = game.maze;
+  // 在迷宫的可通行格中，挑一个位于右下半区、且离墙最远的格子中心作为撤离点
+  let spot = null, bestClear = -1;
+  if (m) {
+    for (let rr = 1; rr < m.gh - 1; rr++) {
+      for (let cc = 1; cc < m.gw - 1; cc++) {
+        if (!m.open[rr * m.gw + cc]) continue;
+        const x = (cc + 0.5) * m.cell, y = (rr + 0.5) * m.cell;
+        if (x < w * 0.5 || y < h * 0.5) continue;         // 偏右下区域
+        let clear = Infinity;
+        for (const wl of game.walls) clear = Math.min(clear, distToRect(x, y, wl));
+        if (clear > bestClear) { bestClear = clear; spot = { x, y }; }
+      }
+    }
+  }
+  if (!spot) spot = { x: w * 0.75, y: h * 0.75 };
+  // 兜底：清除任何与撤离区相交的墙体，确保撤离区绝不会被墙挡住
+  game.walls = game.walls.filter((wl) => !circleRect(spot.x, spot.y, r + 6, wl));
+  game.extract.x = spot.x;
+  game.extract.y = spot.y;
+  game.extract.progress = 0;
+  game.extract.inside = false;
+}
+function spawnChests() {
+  game.chests = [];
+  for (const tier in CONFIG.chests) {
+    for (let i = 0; i < CONFIG.chests[tier]; i++) {
+      const p = randomFreePos(20);
+      game.chests.push({ x: p.x, y: p.y, tier, opened: false, items: null, bob: Math.random() * Math.PI * 2 });
+    }
+  }
+}
+function spawnEnemies() {
+  game.enemies = [];
+  const { w, h } = CONFIG.world;
+  for (let i = 0; i < CONFIG.ai.count; i++) {
+    // 优先在地图左上三分之二区域刷新，远离右下的撤离点
+    let p = null;
+    for (let k = 0; k < 120; k++) {
+      const cand = randomFreePos(CONFIG.ai.r, 700);
+      if (cand.x < w * 0.78 && cand.y < h * 0.78) { p = cand; break; }
+    }
+    if (!p) p = randomFreePos(CONFIG.ai.r, 700);
+    game.enemies.push({
+      x: p.x, y: p.y, r: CONFIG.ai.r, hp: CONFIG.ai.hp, maxHp: CONFIG.ai.hp,
+      angle: 0, fireCd: rand(0.5, 1.5), alive: true,
+      state: "patrol", patrolTarget: randomOpenCellCenter(), patrolTimer: 0,
+      lastX: p.x, lastY: p.y, stuckTime: 0, hitFlash: 0,
+      // 迷宫寻路相关：路径点数组、当前路点索引、目标格、重算计时
+      path: null, pathIdx: 0, pathGoal: null, pathTimer: 0,
+      lastSeen: null, searchTimer: 0,   // 最后看到的玩家位置 / 追击记忆剩余时间
+    });
+  }
+}
+
+/* ================================================================
+ *  M1 —— 开局 / 结算 / 返回基地
+ * ================================================================ */
+function startRaid() {
+  // 携带子弹数量由玩家在仓库里设定（不超过备用弹总量，且不超过 210 发）
+  const carry = clamp(Math.floor(game.save.carry || 0), 0, Math.min(game.save.ammo, CONFIG.weapon.reserveMax));
+  game.save.ammo -= carry;
+  persistSave();
+
+  // 先建地图（迷宫），再据此选择合法的玩家出生点，避免出生在墙里
+  generateMap();
+  spawnExtract();
+  const spawn = randomFreePos(CONFIG.player.r + 6);
+  game.player = {
+    x: spawn.x, y: spawn.y, r: CONFIG.player.r, angle: 0,
+    hp: CONFIG.player.hp, maxHp: CONFIG.player.hp,
+    mag: Math.min(CONFIG.weapon.magSize, carry),
+    reserve: Math.max(0, carry - CONFIG.weapon.magSize),
+    reloading: false, reloadT: 0, fireCd: 0, runMul: 1,
+    slots: new Array(CONFIG.bagSlots).fill(null),
+    hitFlash: 0,
+  };
+
+  // 把仓库「背包区」的物资装进本局背包（本局若阵亡则一并丢失）
+  const loadout = game.save.loadout || [];
+  const bringCount = Math.min(loadout.length, CONFIG.bagSlots);
+  for (let i = 0; i < bringCount; i++) game.player.slots[i] = loadout[i];
+  game.save.loadout = loadout.slice(bringCount);   // 超出背包格的部分仍留在仓库
+  persistSave();
+
+  game.bullets = []; game.drops = []; game.particles = []; game.floatingTexts = [];
+  game.kills = 0; game.raidTimer = CONFIG.raidTime;
+  game.shots.player = 0; game.shots.enemy = 0;
+  game.chestOpen = null; game.hoveredChestUid = null; game.uiMode = null;
+
+  spawnChests();
+  spawnEnemies();
+
+  game.state = "raid";
+  el("startScreen").classList.add("hidden");
+  el("resultPanel").classList.add("hidden");
+  el("hud").classList.remove("hidden");
+  updateHUD();
+}
+function endRaid(success) {
+  if (game.state !== "raid") return;
+  game.state = "result";
+  const p = game.player;
+  const carried = p.mag + p.reserve;
+  let lines = [];
+  if (success) {
+    // 撤离成功：背包物资入库，剩余子弹返还备用弹池
+    const items = p.slots.filter(Boolean);
+    const gained = items.reduce((s, it) => s + it.value, 0);
+    game.save.warehouse.push(...items);
+    game.save.ammo += carried;
+    game.save.extracts += 1;
+    persistSave();
+    lines = [
+      `带出物资 <b style="color:#7dffb0">${items.length}</b> 件，总价值 <b class="coin">${gained}</b>`,
+      `剩余子弹返还 <b class="coin">${carried}</b> 发`,
+      `击杀 <b>${game.kills}</b> 名人机`,
+    ];
+    el("resultTitle").textContent = "撤离成功";
+    el("resultTitle").style.color = "#7dffb0";
+  } else {
+    // 撤离失败：本局背包物资全部丢失（携带子弹也不返还）
+    const lost = p.slots.filter(Boolean);
+    const lostValue = lost.reduce((s, it) => s + it.value, 0);
+    game.save.deaths += 1;
+    persistSave();
+    lines = [
+      `本局物资 <b style="color:#ff9aa6">${lost.length}</b> 件全部丢失，价值 <b class="coin">${lostValue}</b>`,
+      `携带子弹 <b style="color:#ff9aa6">${carried}</b> 发已损失`,
+      `击杀 <b>${game.kills}</b> 名人机`,
+    ];
+    el("resultTitle").textContent = "撤离失败";
+    el("resultTitle").style.color = "#ff5a6a";
+  }
+  el("resultBody").innerHTML = lines.join("<br />");
+  closeAllPanels();
+  el("hud").classList.add("hidden");
+  el("resultPanel").classList.remove("hidden");
+  refreshStartStats();
+}
+function backToBase() {
+  el("resultPanel").classList.add("hidden");
+  el("startScreen").classList.remove("hidden");
+  game.state = "start";
+  refreshStartStats();
+}
+function refreshStartStats() {
+  const s = game.save;
+  el("startStats").innerHTML =
+    `游戏币 <span class="coin">${s.coins}</span>　·　备用子弹 <span class="coin">${s.ammo}</span> 发（本局携带 <span class="coin">${s.carry}</span>）　·　` +
+    `背包区 ${s.loadout.length} 件　·　仓库物资 ${s.warehouse.length} 件　·　成功撤离 ${s.extracts} 次 / 阵亡 ${s.deaths} 次`;
+}
+
+/* ================================================================
+ *  M2 —— 战斗：射击、换弹、弹道与伤害
+ * ================================================================ */
+function tryShoot() {
+  const p = game.player;
+  if (p.reloading || p.fireCd > 0) return;
+  if (p.mag <= 0) { startReload(); return; }          // 空仓自动换弹
+  p.mag--;
+  game.shots.player++;
+  p.fireCd = CONFIG.weapon.fireCd;
+  const sp = CONFIG.weapon.spread;
+  const a = p.angle + rand(-sp, sp);
+  game.bullets.push({
+    x: p.x + Math.cos(p.angle) * (p.r + 6), y: p.y + Math.sin(p.angle) * (p.r + 6),
+    vx: Math.cos(a) * CONFIG.weapon.bulletSpeed, vy: Math.sin(a) * CONFIG.weapon.bulletSpeed,
+    life: CONFIG.weapon.bulletLife, owner: "player", dmg: CONFIG.weapon.dmg,
+  });
+  spawnMuzzle(p.x + Math.cos(p.angle) * p.r, p.y + Math.sin(p.angle) * p.r, p.angle, "#ffd76a");
+}
+function startReload() {
+  const p = game.player;
+  if (p.reloading || p.mag >= CONFIG.weapon.magSize || p.reserve <= 0) return;
+  p.reloading = true;
+  p.reloadT = CONFIG.weapon.reloadTime;
+}
+function finishReload() {
+  const p = game.player;
+  const need = CONFIG.weapon.magSize - p.mag;
+  const take = Math.min(need, p.reserve);
+  p.mag += take; p.reserve -= take;
+  p.reloading = false;
+}
+/** 使用一个药品回血（H 键）：从背包找到第一个可用的药品，回复其 heal 值 */
+function useMedkit() {
+  const p = game.player;
+  if (!p) return;
+  if (p.hp >= p.maxHp) { addFloatingText(p.x, p.y - 34, "生命值已满", "#8ba2c0"); return; }
+  const idx = p.slots.findIndex((it) => it && it.usable && it.heal);
+  if (idx === -1) { addFloatingText(p.x, p.y - 34, "没有可用药品", "#ff9aa6"); return; }
+  const item = p.slots[idx];
+  p.slots[idx] = null;
+  const healed = Math.min(item.heal, p.maxHp - p.hp);
+  p.hp += healed;
+  addFloatingText(p.x, p.y - 34, "+" + healed, "#7dffb0");
+  spawnHitParticles(p.x, p.y, "#7dffb0", 8);
+  updateHUD();
+}
+/** 生成子弹（通用，供 AI 调用） */
+function spawnBullet(x, y, angle, speed, life, owner, dmg) {
+  game.bullets.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life, owner, dmg });
+}
+function updateBullets(dt) {
+  const p = game.player;
+  for (let i = game.bullets.length - 1; i >= 0; i--) {
+    const b = game.bullets[i];
+    b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    let dead = b.life <= 0;
+    // 撞墙
+    if (!dead && posBlocked(b.x, b.y, 1)) {
+      dead = true;
+      spawnHitParticles(b.x, b.y, "#8fbaff");
+    }
+    if (!dead && b.owner === "player") {
+      // 玩家子弹命中人机
+      for (const e of game.enemies) {
+        if (!e.alive) continue;
+        if (dist2(b.x, b.y, e.x, e.y) < (e.r + 3) ** 2) {
+          e.hp -= b.dmg; e.hitFlash = 0.12; dead = true;
+          spawnHitParticles(b.x, b.y, "#ff8a5b");
+          addFloatingText(e.x, e.y - 20, "-" + b.dmg, "#ffb36a");
+          if (e.hp <= 0) killEnemy(e);
+          break;
+        }
+      }
+    } else if (!dead && b.owner === "enemy" && p) {
+      // AI 子弹命中玩家
+      if (dist2(b.x, b.y, p.x, p.y) < (p.r + 3) ** 2) {
+        dead = true;
+        p.hp -= b.dmg; p.hitFlash = 0.15;
+        spawnHitParticles(b.x, b.y, "#ff5a6a");
+        addFloatingText(p.x, p.y - 24, "-" + b.dmg, "#ff5a6a");
+        if (p.hp <= 0) { p.hp = 0; endRaid(false); return; }
+      }
+    }
+    if (dead) game.bullets.splice(i, 1);
+  }
+}
+function killEnemy(e) {
+  e.alive = false;
+  game.kills++;
+  spawnHitParticles(e.x, e.y, "#ff5a6a", 20);
+  addFloatingText(e.x, e.y - 30, "击杀", "#ff9aa6");
+  // 人机掉落一个小补给（白/蓝品质），增加正反馈
+  const q = Math.random() < 0.7 ? "white" : "blue";
+  game.drops.push({ x: e.x, y: e.y, item: makeItem(q), bob: Math.random() * 6 });
+}
+
+/* ---------------- 粒子与飘字（纯视觉） ---------------- */
+function spawnMuzzle(x, y, angle, color) {
+  for (let i = 0; i < 6; i++) {
+    const a = angle + rand(-0.5, 0.5);
+    game.particles.push({ x, y, vx: Math.cos(a) * rand(80, 260), vy: Math.sin(a) * rand(80, 260), life: rand(0.1, 0.25), max: 0.25, color, size: rand(1.5, 3) });
+  }
+}
+function spawnHitParticles(x, y, color, n = 10) {
+  for (let i = 0; i < n; i++) {
+    const a = rand(0, Math.PI * 2);
+    game.particles.push({ x, y, vx: Math.cos(a) * rand(40, 220), vy: Math.sin(a) * rand(40, 220), life: rand(0.2, 0.5), max: 0.5, color, size: rand(1.5, 3.5) });
+  }
+}
+function addFloatingText(x, y, text, color) {
+  game.floatingTexts.push({ x, y, text, color, life: 0.9, max: 0.9 });
+}
+function updateParticles(dt) {
+  for (let i = game.particles.length - 1; i >= 0; i--) {
+    const p = game.particles[i];
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.92; p.vy *= 0.92; p.life -= dt;
+    if (p.life <= 0) game.particles.splice(i, 1);
+  }
+  for (let i = game.floatingTexts.length - 1; i >= 0; i--) {
+    const f = game.floatingTexts[i];
+    f.y -= 32 * dt; f.life -= dt;
+    if (f.life <= 0) game.floatingTexts.splice(i, 1);
+  }
+}
+
+/* ================================================================
+ *  M3 —— 人机 AI：巡逻 → 发现玩家 → 追逐开枪
+ * ================================================================ */
+function updateEnemies(dt) {
+  const p = game.player;
+  if (!p) return;
+  const m = game.maze;
+  for (const e of game.enemies) {
+    if (!e.alive) continue;
+    if (e.hitFlash > 0) e.hitFlash -= dt;
+    if (e.fireCd > 0) e.fireCd -= dt;
+    e.pathTimer -= dt;
+
+    const d = dist(e.x, e.y, p.x, p.y);
+    const canSee = d < CONFIG.ai.viewRange && !lineBlocked(e.x, e.y, p.x, p.y);
+    if (canSee) {
+      e.state = "chase"; e.patrolTimer = 0;
+      e.lastSeen = { x: p.x, y: p.y };      // 记住玩家最后位置
+      e.searchTimer = 4;                    // 失去视野后仍会沿通路追 4 秒
+    } else if (e.state === "chase") {
+      e.searchTimer -= dt;
+      if (e.searchTimer <= 0) { e.state = "patrol"; e.patrolTimer = 0; e.patrolTarget = null; e.path = null; }
+    }
+
+    let tx, ty, speedMul;
+    if (e.state === "chase") {
+      // 有视野追玩家本体；失去视野则追「最后看到的位置」（迷宫寻路会绕过墙体）
+      const tgt = canSee ? { x: p.x, y: p.y } : (e.lastSeen || { x: p.x, y: p.y });
+      tx = tgt.x; ty = tgt.y; speedMul = 1;
+      // 进入射程且有视线 → 停下开枪（面向玩家）
+      if (d < CONFIG.ai.fireRange && canSee && e.fireCd <= 0) {
+        const aim = Math.atan2(p.y - e.y, p.x - e.x);
+        const a = aim + rand(-CONFIG.ai.spread, CONFIG.ai.spread);
+        spawnBullet(e.x + Math.cos(aim) * (e.r + 4), e.y + Math.sin(aim) * (e.r + 4),
+          a, CONFIG.ai.bulletSpeed, CONFIG.ai.bulletLife, "enemy", CONFIG.ai.dmg);
+        spawnMuzzle(e.x + Math.cos(aim) * e.r, e.y + Math.sin(aim) * e.r, aim, "#ff7d7d");
+        game.shots.enemy++;
+        e.fireCd = rand(CONFIG.ai.fireCd[0], CONFIG.ai.fireCd[1]);
+      }
+    } else {
+      // 巡逻：走向随机可通行格中心，到达或超时后重新选点
+      if (!e.patrolTarget || e.patrolTimer <= 0 ||
+          dist(e.x, e.y, e.patrolTarget.x, e.patrolTarget.y) < 30) {
+        e.patrolTarget = randomOpenCellCenter();
+        e.patrolTimer = rand(3, 6);
+        e.path = null;
+      }
+      e.patrolTimer -= dt;
+      tx = e.patrolTarget.x; ty = e.patrolTarget.y; speedMul = 0.7;
+    }
+
+    // 用迷宫 BFS 寻路得到「下一个路点」，避免在墙后直愣愣撞墙
+    let wx = tx, wy = ty;
+    if (m) {
+      const tgt = mazeCellAt(tx, ty);
+      if (e.pathTimer <= 0 || !e.path || !e.pathGoal ||
+          e.pathGoal.c !== tgt.c || e.pathGoal.r !== tgt.r) {
+        e.path = findPath(e.x, e.y, tx, ty);
+        e.pathGoal = tgt; e.pathIdx = 0; e.pathTimer = 0.35;
+      }
+      if (e.path && e.path.length > 1) {
+        while (e.pathIdx < e.path.length - 1 &&
+               dist(e.x, e.y, e.path[e.pathIdx].x, e.path[e.pathIdx].y) < m.cell * 0.5) e.pathIdx++;
+        wx = e.path[e.pathIdx].x; wy = e.path[e.pathIdx].y;
+      }
+    }
+
+    // 移动：分轴尝试，撞墙则该轴不动（实现贴墙滑动）
+    const ang = Math.atan2(wy - e.y, wx - e.x);
+    const step = CONFIG.ai.speed * dt * speedMul;
+    const nx = e.x + Math.cos(ang) * step;
+    const ny = e.y + Math.sin(ang) * step;
+    if (!posBlocked(nx, e.y, e.r)) e.x = nx;
+    if (!posBlocked(e.x, ny, e.r)) e.y = ny;
+
+    // 朝向：追击且有视线时面向玩家，否则面向移动方向
+    e.angle = (e.state === "chase" && canSee) ? Math.atan2(p.y - e.y, p.x - e.x) : ang;
+
+    // 卡住检测：长时间位移很小则重新寻路 / 换巡逻点
+    if (dist(e.x, e.y, e.lastX, e.lastY) < step * 0.3) {
+      e.stuckTime += dt;
+      if (e.stuckTime > 0.6) {
+        e.path = null; e.pathTimer = 0; e.stuckTime = 0;
+        if (e.state === "patrol") { e.patrolTarget = randomOpenCellCenter(); e.patrolTimer = rand(2, 4); }
+      }
+    } else e.stuckTime = 0;
+    e.lastX = e.x; e.lastY = e.y;
+  }
+}
+
+/* ================================================================
+ *  M4 —— 宝箱交互 & 开箱弹窗
+ * ================================================================ */
+/** 找到玩家附近可交互的宝箱（只跳过已被搜空的箱子，未取完的可再次打开） */
+function nearestChest() {
+  const p = game.player;
+  let best = null, bestD = CONFIG.chestOpenRange;
+  for (const c of game.chests) {
+    if (c.items && c.items.length === 0) continue;   // 已搜空
+    const d = dist(p.x, p.y, c.x, c.y);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  return best;
+}
+/** 找到玩家附近可拾取的地面掉落物 */
+function nearestDrop() {
+  const p = game.player;
+  let best = null, bestD = CONFIG.dropPickRange;
+  for (const dp of game.drops) {
+    const d = dist(p.x, p.y, dp.x, dp.y);
+    if (d < bestD) { bestD = d; best = dp; }
+  }
+  return best;
+}
+/**
+ * 打开宝箱：
+ *  - 首次打开才生成物资；再次打开保留剩余物资（修复"没取完却显示已空"的问题）
+ *  - 未搜出的物品播放"搜索动画"，品质越高转得越久
+ */
+function openChest(chest) {
+  if (!chest.items) chest.items = rollLoot(chest.tier);  // 首次开箱生成掉落
+  chest.opened = true;
+  game.chestOpen = chest;
+  game.hoveredChestUid = null;
+  game.uiMode = "chest";
+  el("chestTitle").textContent = CHEST_TIERS[chest.tier].name;
+  el("chestTitle").style.color = CHEST_TIERS[chest.tier].color;
+
+  // 给尚未搜出的物品安排搜索动画：错开出现 + 品质越高转得越久
+  chest.items.forEach((it, i) => {
+    if (it.revealed) return;
+    const delay = i * 300 + CONFIG.chestSpin[it.quality];
+    setTimeout(() => revealChestItem(chest, it), delay);
+  });
+
+  renderChestPanel();
+  el("chestPanel").classList.remove("hidden");
+}
+/** 某件物资搜索完成，替换对应的"转圈"占位卡（只更新这一张，避免其他卡片动画重放） */
+function revealChestItem(chest, item) {
+  if (item.revealed) return;
+  item.revealed = true;
+  if (game.state !== "raid" || game.uiMode !== "chest" || game.chestOpen !== chest) return;
+  if (!chest.items.includes(item)) return;
+  const grid = el("chestGrid");
+  const old = grid.querySelector('.item[data-uid="' + item.uid + '"]');
+  if (old) old.replaceWith(buildChestItemCard(chest, item));
+}
+/** 构建宝箱内的一张卡片：未搜出 → 转圈占位；已搜出 → 可拾取物品卡 */
+function buildChestItemCard(chest, item) {
+  if (!item.revealed) {
+    const d = document.createElement("div");
+    d.className = "item searching";
+    d.dataset.uid = item.uid;
+    d.innerHTML = '<div class="spinner"></div><div class="vl">搜索中…</div>';
+    return d;
+  }
+  const card = makeItemCard(item, {
+    delayIdx: 0,
+    hovered: game.hoveredChestUid === item.uid,
+    onClick: () => pickChestItem(item.uid),
+    onHover: (on) => {
+      if (on) game.hoveredChestUid = item.uid;
+      else if (game.hoveredChestUid === item.uid) game.hoveredChestUid = null;
+      refreshChestHover();
+    },
+  });
+  card.dataset.uid = item.uid;
+  card.dataset.revealed = "true";
+  return card;
+}
+/** 渲染开箱弹窗（左：宝箱物资 / 右：我的背包） */
+function renderChestPanel() {
+  const chest = game.chestOpen;
+  const cg = el("chestGrid");
+  cg.innerHTML = "";
+  if (!chest || chest.items.length === 0) {
+    cg.innerHTML = '<div class="empty-hint">宝箱已空</div>';
+  } else {
+    chest.items.forEach((it) => cg.appendChild(buildChestItemCard(chest, it)));
+  }
+  // 右侧背包
+  const bg = el("chestBagGrid");
+  bg.innerHTML = "";
+  const used = game.player.slots.filter(Boolean).length;
+  el("chestBagCount").textContent = `${used}/${CONFIG.bagSlots}`;
+  game.player.slots.forEach((it, idx) => {
+    if (it) bg.appendChild(makeItemCard(it, {
+      delayIdx: idx, actionLabel: "丢", actionClass: "danger",
+      onAction: () => dropItem(idx),                 // 开箱时也可直接从背包丢弃
+    }));
+    else bg.appendChild(makeEmptySlot());
+  });
+}
+/** 仅刷新悬停高亮，避免整块重绘导致动画重放 */
+function refreshChestHover() {
+  el("chestGrid").querySelectorAll(".item").forEach((c) => {
+    c.classList.toggle("hovered", c.dataset.uid === String(game.hoveredChestUid));
+  });
+}
+/** 从宝箱拾取指定 uid 的物品到背包（用 uid 定位，取走物品后不会错位） */
+function pickChestItem(uid) {
+  const chest = game.chestOpen;
+  if (!chest) return;
+  const idx = chest.items.findIndex((i) => i.uid === uid);
+  if (idx === -1) return;
+  const it = chest.items[idx];
+  if (!it.revealed) return;                          // 还没搜出来，不能拾取
+  const empty = game.player.slots.indexOf(null);
+  if (empty === -1) { toast("背包已满，无法拾取"); return; }
+  game.player.slots[empty] = it;
+  chest.items.splice(idx, 1);
+  game.hoveredChestUid = null;
+  renderChestPanel();
+  updateHUD();
+}
+function toast(msg) { addFloatingText(game.player.x, game.player.y - 40, msg, "#ffcb45"); }
+
+/* ================================================================
+ *  M5 —— 背包 / 地面掉落
+ * ================================================================ */
+function openBag() {
+  game.uiMode = "bag";
+  renderBagPanel();
+  el("bagPanel").classList.remove("hidden");
+}
+function renderBagPanel() {
+  const g = el("bagGrid");
+  g.innerHTML = "";
+  const used = game.player.slots.filter(Boolean).length;
+  el("bagCount").textContent = `${used}/${CONFIG.bagSlots} 格`;
+  game.player.slots.forEach((it, idx) => {
+    if (it) {
+      g.appendChild(makeItemCard(it, {
+        delayIdx: idx,
+        showDrop: true,
+        onDrop: () => dropItem(idx),
+      }));
+    } else g.appendChild(makeEmptySlot());
+  });
+}
+/** 丢弃背包第 idx 格物品到脚下 */
+function dropItem(idx) {
+  const it = game.player.slots[idx];
+  if (!it) return;
+  game.player.slots[idx] = null;
+  // 在玩家周围随机偏移落地，避免重叠
+  const a = rand(0, Math.PI * 2), r = rand(20, 40);
+  let dx = game.player.x + Math.cos(a) * r;
+  let dy = game.player.y + Math.sin(a) * r;
+  if (posBlocked(dx, dy, 8)) { dx = game.player.x; dy = game.player.y; }
+  game.drops.push({ x: dx, y: dy, item: it, bob: Math.random() * 6 });
+  refreshActiveItemPanel();     // 背包或开箱弹窗都能实时刷新
+  updateHUD();
+}
+/** 丢弃物品后刷新当前打开的物品面板 */
+function refreshActiveItemPanel() {
+  if (game.uiMode === "chest") renderChestPanel();
+  else if (game.uiMode === "bag") renderBagPanel();
+}
+/** 拾取地面掉落物 */
+function pickGroundDrop(dp) {
+  const empty = game.player.slots.indexOf(null);
+  if (empty === -1) { toast("背包已满"); return; }
+  game.player.slots[empty] = dp.item;
+  const i = game.drops.indexOf(dp);
+  if (i >= 0) game.drops.splice(i, 1);
+  updateHUD();
+}
+function makeEmptySlot() {
+  const d = document.createElement("div");
+  d.className = "slot-empty";
+  d.textContent = "+";
+  return d;
+}
+/**
+ * 生成一个物品卡片 DOM
+ * opts: { delayIdx, hovered, onClick, onHover, showDrop, onDrop }
+ */
+function makeItemCard(it, opts = {}) {
+  const q = QUALITY[it.quality];
+  const card = document.createElement("div");
+  card.className = "item q-" + it.quality;
+  // 逐个延迟出现，形成「缓慢旋转浮现」的层次感
+  card.style.animationDelay = ((opts.delayIdx || 0) * 0.07) + "s";
+  card.innerHTML =
+    `<div class="ico" style="color:${q.color}">${it.ico || q.ico}</div>` +
+    `<div class="nm">${it.name}</div>` +
+    `<div class="vl">${q.name} · ${it.type} · ${it.value}</div>`;
+  if (opts.hovered) card.classList.add("hovered");
+  if (opts.onClick) card.addEventListener("click", opts.onClick);
+  if (opts.onHover) {
+    card.addEventListener("mouseenter", () => opts.onHover(true));
+    card.addEventListener("mouseleave", () => opts.onHover(false));
+  }
+  if (opts.actionLabel || opts.showDrop) {
+    const handler = opts.onAction || opts.onDrop;
+    if (handler) {
+      const b = document.createElement("div");
+      b.className = "drop-btn" + (opts.actionClass ? " " + opts.actionClass : "");
+      b.textContent = opts.actionLabel || "丢";
+      b.addEventListener("click", (ev) => { ev.stopPropagation(); handler(); });
+      card.appendChild(b);
+    }
+  }
+  return card;
+}
+
+/* ================================================================
+ *  M7 —— 仓库：携带弹药 / 购买子弹与药品 / 背包区（携带入战场）
+ * ================================================================ */
+function openWarehouse() {
+  game.uiMode = "warehouse";
+  renderWarehouse();
+  el("warehousePanel").classList.remove("hidden");
+}
+function renderWarehouse() {
+  const s = game.save;
+  el("whCoins").textContent = s.coins;
+  el("whAmmo").textContent = s.ammo;
+  el("whCount").textContent = `仓库 ${s.warehouse.length} 件 · 背包区 ${s.loadout.length} 格`;
+
+  // 携带子弹输入框（上限：备用弹总量与 210 中较小者）
+  const carryMax = Math.min(s.ammo, CONFIG.weapon.reserveMax);
+  const ci = el("carryInput");
+  ci.max = carryMax;
+  ci.value = s.carry;
+  el("carryMaxHint").textContent = `（当前可携带上限 ${carryMax} 发）`;
+
+  // 背包区：携带入战场的物资
+  const ld = el("ldGrid");
+  ld.innerHTML = "";
+  el("ldCount").textContent = `${s.loadout.length}/${CONFIG.loadoutSlots}`;
+  if (s.loadout.length === 0) {
+    ld.innerHTML = '<div class="empty-hint">空 —— 从下方仓库点「装入」即可带入战场</div>';
+  } else {
+    s.loadout.forEach((it, i) => ld.appendChild(makeItemCard(it, {
+      delayIdx: i % 20, actionLabel: "取出", actionClass: "move",
+      onAction: () => { s.loadout.splice(i, 1); s.warehouse.push(it); persistSave(); renderWarehouse(); },
+    })));
+  }
+
+  // 仓库物资：撤离带出，可出售 / 装入背包区
+  const g = el("whGrid");
+  g.innerHTML = "";
+  if (s.warehouse.length === 0) {
+    g.innerHTML = '<div class="empty-hint">仓库空空如也，去战场搜刮吧</div>';
+  } else {
+    // 按价值倒序展示
+    [...s.warehouse].sort((a, b) => b.value - a.value).forEach((it, i) => {
+      g.appendChild(makeItemCard(it, {
+        delayIdx: i % 20,
+        actionLabel: "装入",
+        onAction: () => {
+          if (s.loadout.length >= CONFIG.loadoutSlots) return;   // 背包区已满
+          const k = s.warehouse.indexOf(it);
+          if (k >= 0) s.warehouse.splice(k, 1);
+          s.loadout.push(it);
+          persistSave(); renderWarehouse();
+        },
+      }));
+    });
+  }
+
+  el("btnBuyAmmo").classList.toggle("disabled", s.coins < CONFIG.buyAmmo.cost);
+  el("btnBuyMed").classList.toggle("disabled", s.coins < CONFIG.medkit.cost);
+}
+function buyAmmo() {
+  const s = game.save;
+  if (s.coins < CONFIG.buyAmmo.cost) return;
+  s.coins -= CONFIG.buyAmmo.cost;
+  s.ammo += CONFIG.buyAmmo.amount;
+  // 购买后可用上限提高，但不自动改动玩家已选携带量
+  persistSave();
+  renderWarehouse();
+}
+/** 购买药品（急救包）：50 币 / 个，进入仓库，可「装入」背包区后带进战场 */
+function buyMedkit() {
+  const s = game.save;
+  if (s.coins < CONFIG.medkit.cost) return;
+  s.coins -= CONFIG.medkit.cost;
+  s.warehouse.push(makeMedkit());
+  persistSave();
+  renderWarehouse();
+}
+/** 设置本局携带的子弹数量 */
+function setCarry() {
+  const s = game.save;
+  const max = Math.min(s.ammo, CONFIG.weapon.reserveMax);
+  let v = parseInt(el("carryInput").value, 10);
+  if (isNaN(v)) v = 0;
+  s.carry = clamp(v, 0, max);
+  persistSave();
+  renderWarehouse();
+  refreshStartStats();
+}
+function sellAll() {
+  const s = game.save;
+  if (s.warehouse.length === 0) return;
+  const total = s.warehouse.reduce((a, it) => a + it.value, 0);
+  s.coins += total;
+  s.warehouse = [];
+  persistSave();
+  renderWarehouse();
+}
+
+/* ================================================================
+ *  M1 —— 玩家更新（移动 / 瞄准 / 撤离）
+ * ================================================================ */
+function updatePlayer(dt) {
+  const p = game.player;
+  if (!p) return;
+  const k = game.inputs.keys;
+
+  // 移动向量（WASD）
+  let mx = 0, my = 0;
+  if (k["KeyW"]) my -= 1;
+  if (k["KeyS"]) my += 1;
+  if (k["KeyA"]) mx -= 1;
+  if (k["KeyD"]) mx += 1;
+  const len = Math.hypot(mx, my);
+  if (len > 0) { mx /= len; my /= len; }
+  const speed = CONFIG.player.speed * (k["ShiftLeft"] || k["ShiftRight"] ? CONFIG.player.runMul : 1);
+  // 分轴移动实现碰撞与贴墙滑动
+  const nx = p.x + mx * speed * dt;
+  const ny = p.y + my * speed * dt;
+  if (!posBlocked(nx, p.y, p.r)) p.x = nx;
+  if (!posBlocked(p.x, ny, p.r)) p.y = ny;
+
+  // 瞄准角度：世界坐标下的鼠标位置
+  const wmx = game.inputs.mouseX + game.cam.x;
+  const wmy = game.inputs.mouseY + game.cam.y;
+  p.angle = Math.atan2(wmy - p.y, wmx - p.x);
+
+  // 射击 / 换弹
+  if (p.fireCd > 0) p.fireCd -= dt;
+  if (p.hitFlash > 0) p.hitFlash -= dt;
+  if (game.inputs.mouseDown) tryShoot();
+  if (p.reloading) {
+    p.reloadT -= dt;
+    if (p.reloadT <= 0) finishReload();
+  }
+
+  // 撤离区判定
+  const ex = game.extract;
+  const inZone = dist(p.x, p.y, ex.x, ex.y) < ex.r;
+  ex.inside = inZone;
+  if (inZone) {
+    ex.progress += dt;
+    if (ex.progress >= CONFIG.extract.holdTime) { endRaid(true); return; }
+  } else if (ex.progress > 0) {
+    ex.progress = Math.max(0, ex.progress - dt * 2); // 离开后快速回落
+  }
+}
+function updateCamera() {
+  const p = game.player, c = canvas;
+  game.cam.x = clamp(p.x - c.width / game.DPR / 2, 0, CONFIG.world.w - c.width / game.DPR);
+  game.cam.y = clamp(p.y - c.height / game.DPR / 2, 0, CONFIG.world.h - c.height / game.DPR);
+}
+
+/* ================================================================
+ *  M1 —— 渲染
+ * ================================================================ */
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+function resizeCanvas() {
+  canvas.width = Math.floor(window.innerWidth * game.DPR);
+  canvas.height = Math.floor(window.innerHeight * game.DPR);
+  canvas.style.width = window.innerWidth + "px";
+  canvas.style.height = window.innerHeight + "px";
+  ctx.setTransform(game.DPR, 0, 0, game.DPR, 0, 0);
+}
+window.addEventListener("resize", resizeCanvas);
+
+const VIEW_W = () => canvas.width / game.DPR;
+const VIEW_H = () => canvas.height / game.DPR;
+
+function render() {
+  const W = VIEW_W(), H = VIEW_H();
+  // 背景
+  ctx.fillStyle = "#070a12";
+  ctx.fillRect(0, 0, W, H);
+  if (game.state !== "raid") return;
+
+  ctx.save();
+  ctx.translate(-game.cam.x, -game.cam.y);
+
+  drawGrid();
+  drawWalls();
+  drawExtract();
+  drawChests();
+  drawDrops();
+  drawEnemies();
+  drawPlayer();
+  drawBullets();
+  drawParticles();
+  drawFloatingTexts();
+
+  ctx.restore();
+
+  drawVignette(W, H);
+  drawMinimap();
+}
+function drawGrid() {
+  const gs = 80;
+  const x0 = Math.floor(game.cam.x / gs) * gs;
+  const y0 = Math.floor(game.cam.y / gs) * gs;
+  const x1 = game.cam.x + VIEW_W(), y1 = game.cam.y + VIEW_H();
+  ctx.strokeStyle = "rgba(40, 90, 150, 0.16)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x = x0; x <= x1; x += gs) { ctx.moveTo(x, y0); ctx.lineTo(x, y1); }
+  for (let y = y0; y <= y1; y += gs) { ctx.moveTo(x0, y); ctx.lineTo(x1, y); }
+  ctx.stroke();
+}
+function drawWalls() {
+  for (const w of game.walls) {
+    ctx.fillStyle = "#0e1a2c";
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+    ctx.strokeStyle = "rgba(60, 150, 255, 0.55)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(w.x + 1, w.y + 1, w.w - 2, w.h - 2);
+  }
+}
+function drawExtract() {
+  const e = game.extract;
+  const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(46, 204, 113, ${0.10 + pulse * 0.08})`;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(125, 255, 176, ${0.55 + pulse * 0.35})`;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // 中央光柱
+  const g = ctx.createRadialGradient(e.x, e.y, 4, e.x, e.y, e.r);
+  g.addColorStop(0, "rgba(125,255,176,0.45)");
+  g.addColorStop(1, "rgba(125,255,176,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#7dffb0";
+  ctx.font = "bold 16px 'Microsoft YaHei'";
+  ctx.textAlign = "center";
+  ctx.fillText("撤 离 区", e.x, e.y + 5);
+  ctx.restore();
+}
+function drawChests() {
+  const t = performance.now() / 1000;
+  for (const c of game.chests) {
+    const cfg = CHEST_TIERS[c.tier];
+    const bob = Math.sin(t * 2 + c.bob) * 3;
+    const s = 18;
+    ctx.save();
+    ctx.translate(c.x, c.y + bob);
+    // 光晕
+    const g = ctx.createRadialGradient(0, 0, 2, 0, 0, 42);
+    g.addColorStop(0, cfg.glow.replace("0.8", "0.35").replace("0.9", "0.4"));
+    g.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.fill();
+    const emptied = c.items && c.items.length === 0;   // 已被搜空
+    if (emptied) ctx.globalAlpha = 0.35;
+    // 箱体（菱形）
+    ctx.rotate(Math.PI / 4);
+    ctx.fillStyle = "#0c1524";
+    ctx.strokeStyle = cfg.color;
+    ctx.lineWidth = 3;
+    ctx.fillRect(-s, -s, s * 2, s * 2);
+    ctx.strokeRect(-s, -s, s * 2, s * 2);
+    ctx.rotate(-Math.PI / 4);
+    ctx.fillStyle = cfg.color;
+    ctx.font = "bold 13px 'Microsoft YaHei'";
+    ctx.textAlign = "center";
+    ctx.fillText(emptied ? "空" : cfg.name[0], 0, 5);
+    ctx.restore();
+  }
+}
+function drawDrops() {
+  const t = performance.now() / 1000;
+  for (const dp of game.drops) {
+    const q = QUALITY[dp.item.quality];
+    const bob = Math.sin(t * 3 + dp.bob) * 3;
+    ctx.save();
+    ctx.translate(dp.x, dp.y + bob);
+    ctx.fillStyle = q.color;
+    ctx.shadowColor = q.color; ctx.shadowBlur = 12;
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = q.color;
+    ctx.font = "11px 'Microsoft YaHei'";
+    ctx.textAlign = "center";
+    ctx.fillText(dp.item.name, 0, -12);
+    ctx.restore();
+  }
+}
+function drawEnemies() {
+  for (const e of game.enemies) {
+    if (!e.alive) continue;
+    ctx.save();
+    ctx.translate(e.x, e.y);
+    // 视野扇形（淡淡的红色探查范围）
+    ctx.rotate(e.angle);
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, CONFIG.ai.fireRange, -0.35, 0.35);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(255, 80, 90, 0.05)";
+    ctx.fill();
+    ctx.rotate(-e.angle);
+    // 身体
+    ctx.beginPath();
+    ctx.arc(0, 0, e.r, 0, Math.PI * 2);
+    ctx.fillStyle = e.hitFlash > 0 ? "#ffffff" : "#3a0f18";
+    ctx.fill();
+    ctx.strokeStyle = "#ff5a6a";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+    // 枪口朝向
+    ctx.strokeStyle = "#ff9aa6";
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(e.angle) * e.r, Math.sin(e.angle) * e.r);
+    ctx.lineTo(Math.cos(e.angle) * (e.r + 12), Math.sin(e.angle) * (e.r + 12));
+    ctx.stroke();
+    // 血条
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(-e.r, -e.r - 12, e.r * 2, 4);
+    ctx.fillStyle = "#ff5a6a";
+    ctx.fillRect(-e.r, -e.r - 12, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 4);
+    ctx.restore();
+  }
+}
+function drawPlayer() {
+  const p = game.player;
+  if (!p) return;
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  // 准星射线
+  ctx.strokeStyle = "rgba(95, 224, 255, 0.18)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(Math.cos(p.angle) * p.r, Math.sin(p.angle) * p.r);
+  ctx.lineTo(Math.cos(p.angle) * 420, Math.sin(p.angle) * 420);
+  ctx.stroke();
+  // 身体
+  ctx.beginPath();
+  ctx.arc(0, 0, p.r, 0, Math.PI * 2);
+  ctx.fillStyle = p.hitFlash > 0 ? "#ffffff" : "#0d3350";
+  ctx.fill();
+  ctx.strokeStyle = "#5fe0ff";
+  ctx.lineWidth = 3;
+  ctx.shadowColor = "#22b8ff"; ctx.shadowBlur = 14;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // 枪
+  ctx.strokeStyle = "#eaf7ff";
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(Math.cos(p.angle) * p.r, Math.sin(p.angle) * p.r);
+  ctx.lineTo(Math.cos(p.angle) * (p.r + 16), Math.sin(p.angle) * (p.r + 16));
+  ctx.stroke();
+  ctx.restore();
+}
+function drawBullets() {
+  for (const b of game.bullets) {
+    const player = b.owner === "player";
+    ctx.strokeStyle = player ? "#ffe08a" : "#ff7d7d";
+    ctx.shadowColor = player ? "#ffcb45" : "#ff5a6a";
+    ctx.shadowBlur = 10;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(b.x, b.y);
+    ctx.lineTo(b.x - b.vx * 0.012, b.y - b.vy * 0.012);
+    ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+}
+function drawParticles() {
+  for (const p of game.particles) {
+    ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+function drawFloatingTexts() {
+  ctx.textAlign = "center";
+  ctx.font = "bold 14px 'Microsoft YaHei'";
+  for (const f of game.floatingTexts) {
+    ctx.globalAlpha = clamp(f.life / f.max, 0, 1);
+    ctx.fillStyle = f.color;
+    ctx.fillText(f.text, f.x, f.y);
+  }
+  ctx.globalAlpha = 1;
+}
+function drawVignette(W, H) {
+  const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 0.85);
+  g.addColorStop(0, "rgba(0,0,0,0)");
+  g.addColorStop(1, "rgba(0,0,0,0.55)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+}
+/** 右上角小地图：显示玩家、敌人、宝箱、撤离点相对位置 */
+function drawMinimap() {
+  const size = 150, pad = 16;
+  const x0 = VIEW_W() - size - pad, y0 = 70;
+  const sx = size / CONFIG.world.w, sy = size / CONFIG.world.h;
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = "rgba(6, 12, 22, 0.8)";
+  ctx.fillRect(x0, y0, size, size);
+  ctx.strokeStyle = "#1f3a5f";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x0, y0, size, size);
+  // 撤离点
+  ctx.fillStyle = "#2ecc71";
+  ctx.beginPath(); ctx.arc(x0 + game.extract.x * sx, y0 + game.extract.y * sy, 4, 0, Math.PI * 2); ctx.fill();
+  // 宝箱
+  for (const c of game.chests) {
+    if (c.items && c.items.length === 0) continue;   // 搜空的箱子不再显示
+    ctx.fillStyle = CHEST_TIERS[c.tier].color;
+    ctx.fillRect(x0 + c.x * sx - 2, y0 + c.y * sy - 2, 4, 4);
+  }
+  // 敌人
+  ctx.fillStyle = "#ff5a6a";
+  for (const e of game.enemies) {
+    if (!e.alive) continue;
+    ctx.beginPath(); ctx.arc(x0 + e.x * sx, y0 + e.y * sy, 2.5, 0, Math.PI * 2); ctx.fill();
+  }
+  // 玩家
+  ctx.fillStyle = "#5fe0ff";
+  ctx.beginPath(); ctx.arc(x0 + game.player.x * sx, y0 + game.player.y * sy, 3.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+/* ================================================================
+ *  HUD 更新
+ * ================================================================ */
+function updateHUD() {
+  const p = game.player;
+  if (!p) return;
+  el("hpFill").style.width = (clamp(p.hp / p.maxHp, 0, 1) * 100) + "%";
+  el("hpText").textContent = Math.ceil(p.hp) + " / " + p.maxHp;
+  el("magText").textContent = p.mag;
+  el("resText").textContent = p.reserve;   // 备用弹随换弹/消耗实时更新
+  el("reloadHint").textContent = p.reloading ? "换弹中..." : (p.mag === 0 ? "按 R 换弹" : "");
+  el("hudKills").textContent = game.kills;
+  const used = p.slots.filter(Boolean).length;
+  el("hudBag").textContent = used + "/" + CONFIG.bagSlots;
+  el("hudMeds").textContent = p.slots.filter((it) => it && it.usable).length;   // 可用药品数量
+  const m = Math.max(0, Math.floor(game.raidTimer / 60));
+  const s = Math.max(0, Math.floor(game.raidTimer % 60));
+  el("hudTime").textContent = m + ":" + String(s).padStart(2, "0");
+}
+
+/* ================================================================
+ *  M1 —— 主循环
+ * ================================================================ */
+let lastT = performance.now();
+let frameCount = 0;
+function loop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  game.time = dt;
+  frameCount++;
+
+  if (game.state === "raid" && !game.uiMode) {
+    // 面板打开时暂停世界推进（防止被偷袭，也让交互更从容）
+    game.raidTimer -= dt;
+    updatePlayer(dt);
+    if (game.state === "raid") {   // updatePlayer 可能触发撤离结算
+      updateEnemies(dt);
+      updateBullets(dt);
+      updateParticles(dt);
+      updateCamera();
+      updateHUD();
+      updatePrompt();
+    }
+    if (game.state === "raid" && game.raidTimer <= 0) endRaid(false); // 超时视为撤离失败
+  } else if (game.state === "raid") {
+    updateCamera();  // 面板打开时仍保持相机与玩家同步
+  }
+
+  render();
+  requestAnimationFrame(loop);
+}
+/** 底部交互提示：开箱 / 拾取 */
+function updatePrompt() {
+  const tip = el("promptText");
+  const dp = nearestDrop();
+  if (dp) { tip.textContent = "按 F 拾取：" + dp.item.name; tip.classList.remove("hidden"); }
+  else {
+    const c = nearestChest();
+    if (c) { tip.textContent = "按 F 开启 " + CHEST_TIERS[c.tier].name; tip.classList.remove("hidden"); }
+    else tip.classList.add("hidden");
+  }
+  // 撤离读条
+  const eb = el("extractBar");
+  if (game.extract.inside && game.extract.progress > 0) {
+    eb.classList.remove("hidden");
+    const pct = clamp(game.extract.progress / CONFIG.extract.holdTime, 0, 1);
+    el("extractFill").style.width = (pct * 100) + "%";
+    el("extractPct").textContent = Math.floor(pct * 100);
+  } else eb.classList.add("hidden");
+}
+
+/* ================================================================
+ *  面板开关
+ * ================================================================ */
+function closeAllPanels() {
+  el("chestPanel").classList.add("hidden");
+  el("bagPanel").classList.add("hidden");
+  el("warehousePanel").classList.add("hidden");
+  game.uiMode = null;
+  game.chestOpen = null;
+  game.hoveredChestUid = null;
+}
+function toggleBag() {
+  if (game.state !== "raid") return;
+  if (game.uiMode === "bag") { closeAllPanels(); return; }           // 已打开 → 关闭
+  if (game.uiMode === "chest") {                                     // 开箱中 → 切到背包
+    el("chestPanel").classList.add("hidden");
+    game.chestOpen = null; game.hoveredChestUid = null;
+    openBag(); return;
+  }
+  if (game.uiMode) return;                                           // 其它面板打开时忽略
+  openBag();
+}
+
+/* ================================================================
+ *  输入处理
+ * ================================================================ */
+window.addEventListener("keydown", (e) => {
+  // Tab 需要阻止默认（否则焦点切走）
+  if (e.code === "Tab") { e.preventDefault(); }
+  game.inputs.keys[e.code] = true;
+
+  if (e.code === "Escape") { if (game.uiMode) closeAllPanels(); return; }
+
+  if (game.state !== "raid") return;
+
+  // --- 面板打开时的按键 ---
+  if (game.uiMode === "chest") {
+    if (e.code === "KeyF" && game.hoveredChestUid != null) pickChestItem(game.hoveredChestUid);
+    if (e.code === "Tab") toggleBag();
+    return;
+  }
+  if (game.uiMode === "bag") {
+    if (e.code === "Tab") toggleBag();
+    return;
+  }
+  if (game.uiMode) return;  // 其它面板（仓库/结算）不处理游戏输入
+
+  // --- 战斗按键 ---
+  if (e.code === "KeyR") startReload();
+  if (e.code === "KeyH") useMedkit();
+  if (e.code === "Tab") { e.preventDefault(); toggleBag(); return; }
+  if (e.code === "KeyF") {
+    // 交互优先级：地面掉落 > 开箱
+    const dp = nearestDrop();
+    if (dp) { pickGroundDrop(dp); return; }
+    const c = nearestChest();
+    if (c) openChest(c);
+  }
+});
+window.addEventListener("keyup", (e) => { game.inputs.keys[e.code] = false; });
+// 失焦时清空按键，避免"卡键"
+window.addEventListener("blur", () => { game.inputs.keys = {}; game.inputs.mouseDown = false; });
+
+canvas.addEventListener("mousemove", (e) => {
+  game.inputs.mouseX = e.clientX;
+  game.inputs.mouseY = e.clientY;
+});
+canvas.addEventListener("mousedown", (e) => { if (e.button === 0) game.inputs.mouseDown = true; });
+window.addEventListener("mouseup", (e) => { if (e.button === 0) game.inputs.mouseDown = false; });
+canvas.addEventListener("contextmenu", (e) => e.preventDefault());
+
+/* ================================================================
+ *  UI 事件绑定
+ * ================================================================ */
+function el(id) { return document.getElementById(id); }
+
+el("btnStart").addEventListener("click", startRaid);
+el("btnWarehouse").addEventListener("click", openWarehouse);
+el("whClose").addEventListener("click", () => { el("warehousePanel").classList.add("hidden"); game.uiMode = null; refreshStartStats(); });
+el("btnBuyAmmo").addEventListener("click", buyAmmo);
+el("btnBuyMed").addEventListener("click", buyMedkit);
+el("btnSetCarry").addEventListener("click", setCarry);
+el("btnSellAll").addEventListener("click", sellAll);
+el("chestClose").addEventListener("click", closeAllPanels);
+el("bagClose").addEventListener("click", closeAllPanels);
+el("btnBackBase").addEventListener("click", backToBase);
+
+/* ================================================================
+ *  启动
+ * ================================================================ */
+function init() {
+  game.save = loadSave();
+  persistSave();
+  refreshStartStats();
+  resizeCanvas();
+  requestAnimationFrame(loop);
+
+  // 暴露到全局，便于自动化测试读取状态（Playwright / 控制台调试）
+  window.__GAME__ = game;
+  window.__CONFIG__ = CONFIG;
+  window.__API__ = {
+    startRaid, endRaid, backToBase, openChest, openBag, openWarehouse,
+    makeItem, makeMedkit, rollLoot, startReload, useMedkit, buyMedkit, setCarry,
+    nearestChest, nearestDrop, posBlocked, lineBlocked, findPath, mazeCellAt,
+    get frameCount() { return frameCount; },
+    // 测试辅助：把玩家瞬移到指定坐标 / 直接给背包塞物品
+    teleport(x, y) { game.player.x = x; game.player.y = y; },
+    giveItem(q) { const e = game.player.slots.indexOf(null); if (e >= 0) game.player.slots[e] = makeItem(q); },
+    giveMedkit() { const e = game.player.slots.indexOf(null); if (e >= 0) game.player.slots[e] = makeMedkit(); },
+  };
+}
+init();
+</script>
+</body>
+</html>
